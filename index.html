@@ -1,7 +1,23 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <base href="https://cdn.jsdelivr.net/gh/technonyte00/deltarune@main/">
+  <!--<base href="https://cdn.jsdelivr.net/gh/technonyte00/deltarune@main/">-->
+  <script>
+    // DEV: when served from a local live server, load menu assets (style.css,
+    // logo.png, icons/, audios/) locally instead of the GitHub/jsDelivr CDN.
+    window.IS_LOCAL_DEV = (function () {
+      var h = location.hostname;
+      return h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "" ||
+        h === "0.0.0.0" || /^192\.168\./.test(h) || /^10\./.test(h) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+    })();
+    // If a <base> exists, point it at the local host during dev; if there is no
+    // <base> (e.g. it's commented out), relative URLs already resolve locally.
+    if (window.IS_LOCAL_DEV) {
+      var b = document.querySelector("base");
+      if (b) b.href = location.origin + "/";
+    }
+  </script>
   <meta charset="UTF-8">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -31,10 +47,10 @@
       <span class="title">Prophecy</span>
       <img src="icons/4.png">
     </a>
-    <a href="javascript:alert('Chapter 5 coming soon!')" class="disabled-row">
+    <a href="javascript:loadChapter(5)" class="row">
       <span class="chapter">Chapter 5</span>
-      <span class="disabled-title">--</span>
-      <img src="icons/0.png">
+      <span class="title">Festival Day</span>
+      <img src="icons/5.png">
     </a>
     <a href="javascript:alert('Chapter 6 coming soon!')" class="disabled-row">
       <span class="chapter">Chapter 6</span>
@@ -46,9 +62,9 @@
       <span class="disabled-title">--</span>
       <img src="icons/0.png">
     </a>
-    <a href="javascript:window.open('https://truffled.lol', '_blank')" class="row">
+    <a href="#" class="row">
       <span class="chapter"></span>
-      <span class="title">port by bog :o</span>
+      <span class="title">port by bog and edited for Ch. 5 by Multi-Language-coder</span>
       <span class="badge"></span>
     </a>
   </div>
@@ -57,6 +73,9 @@
     your slow ass browser doesnt support AUDIO?
   </audio>
   <button id="mute">🔊</button>
+  <label id="preloadToggle" style="position:fixed;bottom:8px;left:8px;color:#fff;font-family:'Lucida Console',Monaco,monospace;font-size:12px;opacity:.75;z-index:9;cursor:pointer;user-select:none;">
+    <input type="checkbox" id="preloadAudio" style="vertical-align:middle;"> Preload all audio<span id="preloadStatus"></span>
+  </label>
   <script>
     const audio = document.getElementById('drone');
     const mute = document.getElementById('mute');
@@ -78,7 +97,12 @@
     updateButton();
 
     function loadChapter(chapter) {
-      fetch(`chapter${chapter}/index.html`).then(res => res.text()).then(html => {
+      // Ch5 is hosted from this repo (upstream CDN has no ch5 yet), so in production
+      // load it by absolute URL. On a local dev server, load it locally instead.
+      const url = (chapter === 5 && !window.IS_LOCAL_DEV)
+        ? 'https://cdn.jsdelivr.net/gh/Multi-Language-Coder/deltarune@main/chapter5/index.html'
+        : `chapter${chapter}/index.html`;
+      fetch(url).then(res => res.text()).then(html => {
         gamestarted = true;
         document.documentElement.innerHTML = html;
         document.documentElement.querySelectorAll('script').forEach(oldScript => {
@@ -156,6 +180,68 @@
       }
       }
     });
+  </script>
+  <script>
+    // "Preload all audio" — optional. When on, a root-scoped service worker
+    // downloads every shared music track + sound effect into Cache Storage and
+    // serves them cache-first, so in-game audio plays instantly instead of
+    // streaming on demand. Choice is remembered across visits.
+    (function () {
+      var KEY = "preloadAudio";
+      var box = document.getElementById("preloadAudio");
+      var statusEl = document.getElementById("preloadStatus");
+      var reg = null;
+      var hasSW = "serviceWorker" in navigator;
+
+      function setStatus(t) { if (statusEl) statusEl.textContent = t ? " — " + t : ""; }
+
+      async function ensureSW() {
+        if (!hasSW) return null;
+        if (!reg) { reg = await navigator.serviceWorker.register("sw.js"); await navigator.serviceWorker.ready; }
+        return reg;
+      }
+
+      async function startPreload() {
+        if (!hasSW) { setStatus("not supported here"); return; }
+        setStatus("starting…");
+        await ensureSW();
+        var list;
+        try { list = await (await fetch("audio-manifest.json")).json(); }
+        catch (e) { setStatus("manifest error"); return; }
+        // Absolute URLs so the SW caches exactly what the game will request.
+        var urls = list.map(function (p) { return new URL(p, location.href).href; });
+        var worker = (reg && reg.active) || navigator.serviceWorker.controller;
+        if (!worker) { setStatus("service worker not ready"); return; }
+        setStatus("caching 0/" + urls.length);
+        worker.postMessage({ type: "PRECACHE", urls: urls });
+      }
+
+      if (hasSW) {
+        navigator.serviceWorker.addEventListener("message", function (e) {
+          var d = e.data || {};
+          if (d.type === "PRECACHE_PROGRESS") setStatus("caching " + d.done + "/" + d.total);
+          else if (d.type === "PRECACHE_DONE") setStatus("ready ✓");
+        });
+      }
+
+      var on = localStorage.getItem(KEY) === "1";
+      if (box) box.checked = on;
+      if (!hasSW) { setStatus("not supported here"); if (box) box.disabled = true; }
+      else if (on) { ensureSW().then(startPreload); } // keep SW active + top up cache
+
+      if (box) box.addEventListener("change", function () {
+        if (box.checked) {
+          localStorage.setItem(KEY, "1");
+          startPreload();
+        } else {
+          localStorage.setItem(KEY, "0");
+          setStatus("off");
+          if (reg && reg.active) reg.active.postMessage({ type: "CLEAR_AUDIO_CACHE" });
+          if (hasSW) navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.unregister(); });
+          reg = null;
+        }
+      });
+    })();
   </script>
 </body>
 </html>
