@@ -8,7 +8,7 @@
       (function () {
         var h = location.hostname;
         var isLocal =
-          h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "" ||
+          h === "localhost" || h === "127.0.0.1" || h === "[::1]" ||
           h === "0.0.0.0" || /^192\.168\./.test(h) || /^10\./.test(h) ||
           /^172\.(1[6-9]|2\d|3[01])\./.test(h);
         if (isLocal) {
@@ -446,7 +446,7 @@ function rerouteAudio(url) {
   if (typeof url !== "string") return url;
   var m = url.match(/(?:^|\/)mus\/([^/?#]+\.ogg)([?#].*)?$/i);
   if (m) return "../mus/" + m[1] + (m[2] || "");
-  var s = url.match(/(?:^|\/)(snd_[^/?#]+\.ogg)([?#].*)?$/i);
+  var s = url.match(/(?:^|\/)([^/?#]+\.ogg)([?#].*)?$/i);
   if (s) return "../audios/" + s[1] + (s[2] || "");
   return url;
 }

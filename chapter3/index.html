@@ -1,7 +1,31 @@
 <!DOCTYPE html>
 <html lang="en-us">
   <head>
-    <base href="https://cdn.jsdelivr.net/gh/technonyte00/deltarune@main/chapter3/">
+    <base href="https://cdn.jsdelivr.net/gh/Multi-Language-Coder/deltarune@main/chapter3/">
+    <script>
+      // Load audio from the shared repo-root folders (/mus/, /audios/) instead of a
+      // per-chapter copy. Installed early so it wraps the game's own fetch/XHR hooks.
+      (function () {
+        function rerouteAudio(url) {
+          if (typeof url !== "string") return url;
+          var m = url.match(/(?:^|\/)mus\/([^/?#]+\.ogg)([?#].*)?$/i);
+          if (m) return "../mus/" + m[1] + (m[2] || "");
+          var s = url.match(/(?:^|\/)([^/?#]+\.ogg)([?#].*)?$/i);
+          if (s) return "../audios/" + s[1] + (s[2] || "");
+          return url;
+        }
+        var nativeOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function (method, url) {
+          if (arguments.length > 1) arguments[1] = rerouteAudio(url);
+          return nativeOpen.apply(this, arguments);
+        };
+        var nativeFetch = window.fetch;
+        window.fetch = function (input, init) {
+          if (typeof input === "string") input = rerouteAudio(input);
+          return nativeFetch.call(this, input, init);
+        };
+      })();
+    </script>
     <script>
       // better debugging for me
       const ogalert = window.alert;
